@@ -2,8 +2,7 @@ require "rubygems"
 require "sequel"
 require 'logger'
 
-db = Sequel.connect("postgres://localhost/books",
-					 loggers: Logger.new($stdout))
+db = Sequel.connect('sqlite://words.db', loggers: Logger.new($stdout))
 					 
 db.create_table :books do
 	primary_key :id
@@ -15,6 +14,7 @@ end
 db.create_table :words do
 	primary_key :id
 	String :body
+  Integer :length
 end
 
 db.create_table :uses do

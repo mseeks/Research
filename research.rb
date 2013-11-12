@@ -1,41 +1,8 @@
 require "rubygems"
 require "sequel"
 require 'logger'
-require 'thread'
 
-db = Sequel.connect("postgres://localhost/books",
-					 loggers: Logger.new($stdout))
-
-class Pool
-	def initialize(size)
-		@size = size
-		@jobs = Queue.new
-
-		@pool = Array.new(@size) do |i|
-			Thread.new do
-				Thread.current[:id] = i
-
-				catch(:exit) do
-					loop do
-						job, args = @jobs.pop
-						job.call(*args)
-					end
-				end
-			end
-		end
-	end
-	def schedule(*args, &block)
-		@jobs << [block, args]
-	end
-
-	def shutdown
-		@size.times do
-			schedule { throw :exit }
-		end
-
-		@pool.map(&:join)
-	end
-end
+db = Sequel.connect('sqlite://words.db', loggers: Logger.new($stdout))
 
 class Book < Sequel::Model
 	one_to_many :uses
@@ -52,8 +19,6 @@ class Word < Sequel::Model
 	many_to_many :books, join_table: :uses
 end
 
-p = Pool.new(1000)
-
 Dir.glob("./books/*.txt") do |file|
 	text = IO.read(file)
 	title = /Title:\s(.+)/i.match(text)[1]
@@ -62,12 +27,11 @@ Dir.glob("./books/*.txt") do |file|
 	book = Book.where(title: title, author: author, year: year).first
 	if book == nil
 		book = Book.create(title: title, author: author, year: year)
-		text.strip.split(/\W+/).each do |body|
+		text.strip.split(/[[:punct:]||[:space:]||[:blank:]]+/).each do |body|
 			body.downcase!
-			p.schedule do
 				word = Word.where(body: body).first
 				if word == nil
-					word = Word.create(body: body)
+					word = Word.create(body: body, length: body.length)
 				end
 				use = Use.where(book_id: book.id, word_id: word.id).first
 				if use == nil
@@ -76,8 +40,5 @@ Dir.glob("./books/*.txt") do |file|
 				use.count += 1
 				use.save
 			end
-		end
 	end
 end
-
-at_exit { p.shutdown }
